@@ -1,0 +1,31 @@
+
+<Bindings>
+    <Layer name="SI_KEYBINDINGS_LAYER_GENERAL">
+        <Category name="Ground Marker">
+            <Action name="GROUND_MARKER_TOGGLE">
+                <Down>GroundMarker:ToggleEnabled()</Down>
+            </Action>
+            <Action name="GROUND_MARKER_CYCLE_TYPE">
+                <Down>GroundMarker:CycleMarkerType(1)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_INCREASE_DISTANCE">
+                <Down>GroundMarker:AdjustDistance(1, 1)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_DECREASE_DISTANCE">
+                <Down>GroundMarker:AdjustDistance(1, -1)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_TOGGLE_1">
+                <Down>GroundMarker:ToggleMarker(1)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_TOGGLE_2">
+                <Down>GroundMarker:ToggleMarker(2)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_TOGGLE_3">
+                <Down>GroundMarker:ToggleMarker(3)</Down>
+            </Action>
+            <Action name="GROUND_MARKER_TOGGLE_4">
+                <Down>GroundMarker:ToggleMarker(4)</Down>
+            </Action>
+        </Category>
+    </Layer>
+</Bindings>

@@ -1,0 +1,9 @@
+## Title: Ground Marker
+## Author: jpwallace22
+## Version: 1.0.0
+## APIVersion: 101041
+## Description: Places customizable ground markers at specified distances from your character
+## SavedVariables: GroundMarkerSavedVars
+## DependsOn: LibAddonMenu-2.0
+## OptionalDependsOn: OdySupportIcons
+
