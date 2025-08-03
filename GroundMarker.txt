@@ -7,3 +7,6 @@
 ## DependsOn: LibAddonMenu-2.0
 ## OptionalDependsOn: OdySupportIcons
 
+GroundMarker.lua
+GroundMarkerMenu.lua
+GroundMarkerRenderer.lua
