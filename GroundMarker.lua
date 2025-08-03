@@ -50,41 +50,6 @@ GroundMarker.defaults = {
 -- Local variables
 local markers = {}
 
--- Utility functions
-local function GetForwardVector()
-	local heading = GetPlayerCameraHeading()
-	-- Convert heading to forward vector
-	local x = math.sin(heading)
-	local z = math.cos(heading)
-	return x, z
-end
-
-local function GetMarkerWorldPosition(markerIndex)
-	local marker = GroundMarker.savedVariables.markers[markerIndex]
-	if not marker or not marker.enabled then
-		return nil, nil, nil
-	end
-
-	-- Get player position
-	local zone, worldX, worldY, worldZ = GetUnitWorldPosition("player")
-
-	-- Get forward vector - use camera heading for proper orientation in front of player
-	local heading = GetPlayerCameraHeading()
-	local forwardX = math.sin(heading)
-	local forwardZ = math.cos(heading)
-	
-	-- Calculate marker position in world coordinates
-	local distance = marker.distance * 100 -- Convert meters to centimeters
-	local markerX = worldX + (forwardX * distance)
-	local markerZ = worldZ + (forwardZ * distance)
-	
-	-- Use player Y position for height (ground level)
-	-- Offset slightly lower to ensure it's on the ground
-	local markerY = worldY - 10 -- Offset 10cm below player to ensure it's on the ground
-	
-	return markerX, markerY, markerZ
-end
-
 -- Initialization
 function GroundMarker:Initialize()
 	-- Load saved variables
@@ -108,81 +73,43 @@ end
 function GroundMarker:CreateMarkerControls()
 	-- Create markers
 	for i = 1, 4 do
-		-- Create a topLevelControl to hold the marker
-		local container = WINDOW_MANAGER:CreateTopLevelWindow("GroundMarkerContainer" .. i)
-		container:SetClampedToScreen(true)
-		container:SetDrawLayer(DL_OVERLAY)
-		container:SetDrawTier(DT_HIGH)
-		container:SetDrawLevel(5000 + i) -- High draw level
-		container:SetDimensions(128, 128)
+		-- Create marker control directly - no container hierarchy
+		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, GuiRoot, CT_TEXTURE)
 		
-		-- Create the texture control inside the container
-		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, container, CT_TEXTURE)
+		-- Set proper draw layer and level
+		marker:SetDrawLayer(DL_OVERLAY)
+		marker:SetDrawTier(DT_HIGH)
+		marker:SetDrawLevel(100)
 		
-		-- Set default properties
-		marker:SetAnchorFill(container) -- Fill the container
-		marker:SetColor(1, 0, 0, 0.7) -- Default color
+		-- Set dimensions
+		marker:SetDimensions(128, 128)
 		
-		-- Hide by default until positioned
-		container:SetHidden(true)
+		-- Hide initially
+		marker:SetHidden(true)
 		
 		-- Store in markers table
 		markers[i] = marker
-		self["markerContainer" .. i] = container
 		
-		-- Set initial texture based on settings
-		self:UpdateMarkerTexture(i)
-	end
-end
-
-
-function GroundMarker:UpdateMarkerTexture(markerIndex)
-	local marker = markers[markerIndex]
-	local settings = self.savedVariables.markers[markerIndex]
-
-	if not marker or not settings then
-		return
-	end
-
-	-- Set texture based on type
-	local texturePath
-	
-	-- Try different paths for the texture
-	if settings.type == "circle" then
-		-- Use a known circle texture from game UI if possible
-		texturePath = "GroundMarker/textures/circle.dds"
-		-- Fallback to a known circle texture from ESO UI
-		if not marker:SetTexture(texturePath) then
-			texturePath = "/esoui/art/buttons/gamepad/pointsminus_up.dds" -- Round button texture
-		end
-	elseif settings.type == "x" then
-		texturePath = "GroundMarker/textures/x.dds"
-		-- Fallback to a known X texture from ESO UI
-		if not marker:SetTexture(texturePath) then
-			texturePath = "/esoui/art/buttons/decline_up.dds" -- X button texture
-		end
-	elseif settings.type == "custom" and settings.customTexture ~= "" then
-		texturePath = settings.customTexture
-	else
-		-- Use a very visible default
-		texturePath = "/esoui/art/icons/mapkey/mapkey_groupboss.dds"
-	end
-	
-	-- Set the texture
-	marker:SetTexture(texturePath)
-	
-	-- Apply projection effect - make it appear to be lying flat on the ground
-	-- We do this by "squashing" the Y dimension to simulate perspective
-	-- This is a common technique to fake 3D ground markers in 2D UI systems
-	if settings.type == "circle" then
-		-- For circles, we can use a special technique to make them appear flat on ground
-		-- Set aspect ratio to make it look like it's projected onto the ground
-		local container = GroundMarker["markerContainer" .. markerIndex]
-		if container then
-			container:SetScale(1.0, 0.5) -- Squash Y axis to create 3D ground projection effect
+		-- Set marker texture based on settings
+		local settings = self.savedVariables.markers[i]
+		if settings then
+			-- Determine texture based on type
+			local texturePath = "GroundMarker/textures/circle.dds"  -- Default texture
+			
+			if settings.type == "custom" and settings.customTexture ~= "" then
+				texturePath = settings.customTexture
+			end
+			
+			-- Apply texture
+			marker:SetTexture(texturePath)
+			
+			-- Apply color from settings
+			marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a)
 		end
 	end
 end
+
+
 
 function GroundMarker:OnUpdate()
 	if not self.savedVariables.enabled then
@@ -203,86 +130,59 @@ end
 
 function GroundMarker:UpdateMarker(markerIndex)
 	local marker = markers[markerIndex]
-	local container = self["markerContainer" .. markerIndex]
 	local settings = self.savedVariables.markers[markerIndex]
 
 	-- Make sure we have all the objects we need
-	if not marker or not container or not settings or not settings.enabled then
-		if container then container:SetHidden(true) end
+	if not marker or not settings or not settings.enabled then
+		if marker then marker:SetHidden(true) end
 		return
 	end
 
-	-- Get marker world position - this is the 3D position in the world
-	local worldX, worldY, worldZ = GetMarkerWorldPosition(markerIndex)
-	if not worldX then
-		container:SetHidden(true)
-		return
-	end
-
+	-- Get player position and heading
+	local zone, px, py, pz = GetUnitWorldPosition("player")
+	local heading = GetPlayerCameraHeading()
+	
+	-- Calculate marker position in front of player
+	local dist = settings.distance * 100 -- Convert meters to cm
+	local mx = px + math.sin(heading) * dist
+	local my = py
+	local mz = pz + math.cos(heading) * dist
+	
 	-- Convert world position to screen position
-	local screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
-
-	-- Check if the position is valid and visible on screen
-	if not isOnScreen or not screenX or not screenY then
-		container:SetHidden(true)
+	local x, y, onScreen = WorldPositionToGuiRender3DPosition(mx, my, mz)
+	
+	-- If marker is not on screen, hide it
+	if not onScreen then
+		marker:SetHidden(true)
 		return
 	end
-
-	-- Position the container (which holds the marker)
-	container:ClearAnchors()
 	
-	-- Properly position the marker on screen
-	-- The worldPosition to screen conversion gives us coordinates relative to TOPLEFT of screen
-	container:SetAnchor(CENTER, GuiRoot, TOPLEFT, screenX, screenY)
+	-- Position marker at the calculated screen position
+	marker:ClearAnchors()
+	marker:SetAnchor(CENTER, GuiRoot, TOPLEFT, x, y)
 	
-	-- Calculate distance from player for scaling
-	local _, playerX, playerY, playerZ = GetUnitWorldPosition("player")
-	local distanceToMarker = math.sqrt(
-		(worldX - playerX)^2 + 
-		(worldY - playerY)^2 + 
-		(worldZ - playerZ)^2) / 100 -- Convert to meters
+	-- Set size based on settings and distance
+	local size = 128 * settings.size
+	marker:SetDimensions(size, size)
 	
-	-- Calculate size based on distance - apply perspective scaling
-	-- The further away, the smaller it appears (simulating 3D perspective)
-	local baseSize = 128 * settings.size
-	local perspectiveScale = 1.0
+	-- Apply color
+	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a)
 	
-	-- Apply non-linear perspective scaling based on distance
-	if distanceToMarker > 1 then -- More than 1 meter away
-		perspectiveScale = 1 / (distanceToMarker * 0.1)
-		perspectiveScale = math.max(0.2, math.min(1.5, perspectiveScale)) -- Clamp to reasonable range
-	end
-	
-	local size = baseSize * perspectiveScale
-	container:SetDimensions(size, size)
-	
-	-- Adjust alpha based on distance too - more distant markers are more transparent
-	local alphaScale = 1.0
-	if distanceToMarker > 10 then -- More than 10 meters away
-		alphaScale = 1 - ((distanceToMarker - 10) / 40) -- Linear fade over 40m
-		alphaScale = math.max(0.3, alphaScale) -- Don't go fully transparent
-	end
-	
-	-- Apply color with distance-adjusted alpha
-	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a * alphaScale)
-
-	-- Apply rotation - align with ground
-	-- For ground markers, typically we want them to lie flat, not rotate with camera
-	marker:SetTextureRotation(0)
+	-- Apply rotation if enabled
 	if settings.rotateWithPlayer then
-		local heading = GetPlayerCameraHeading()
 		marker:SetTextureRotation(heading)
+	else
+		marker:SetTextureRotation(0)
 	end
-
+	
 	-- Apply pulse effect if enabled
 	if settings.pulseEnabled then
 		local time = GetGameTimeMilliseconds() / 1000
 		local pulse = math.sin(time * 2) * 0.2 + 0.8
 		marker:SetAlpha(marker:GetAlpha() * pulse)
 	end
-
-	-- Make sure both container and marker are visible
-	container:SetHidden(false)
+	
+	-- Make marker visible
 	marker:SetHidden(false)
 end
 
