@@ -142,7 +142,7 @@ function GroundMarker:CreateSettingsMenu()
 			type = "dropdown",
 			name = "Marker Type",
 			tooltip = "Visual style of the marker",
-			choices = { "circle", "x", "custom" },
+			choices = { "circle", "custom" },
 			getFunc = function()
 				return self.savedVariables.markers[i].type
 			end,

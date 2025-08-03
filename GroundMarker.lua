@@ -27,7 +27,7 @@ GroundMarker.defaults = {
 		[3] = {
 			enabled = false,
 			distance = 30,
-			type = "x",
+			type = "circle",
 			color = { r = 0, g = 0, b = 1, a = 0.7 },
 			size = 1.0,
 			pulseEnabled = false,
@@ -36,7 +36,7 @@ GroundMarker.defaults = {
 		[4] = {
 			enabled = false,
 			distance = 40,
-			type = "x",
+			type = "circle",
 			color = { r = 1, g = 1, b = 0, a = 0.7 },
 			size = 1.0,
 			pulseEnabled = false,
@@ -73,13 +73,17 @@ local function GetMarkerWorldPosition(markerIndex)
 
 	-- Get forward vector
 	local forwardX, forwardZ = GetForwardVector()
-
+	
 	-- Calculate marker position
 	local distance = marker.distance * 100 -- Convert meters to centimeters
 	local markerX = worldX + (forwardX * distance)
 	local markerZ = worldZ + (forwardZ * distance)
+	
+	-- Use player Y position for height (ground level)
+	-- This keeps the marker at the same height as the player
+	local markerY = worldY
 
-	return markerX, worldY, markerZ
+	return markerX, markerY, markerZ
 end
 
 -- Initialization
@@ -104,8 +108,10 @@ function GroundMarker:Initialize()
 end
 
 function GroundMarker:CreateMarkerControls()
+	d("GroundMarker: Creating marker controls")
 	for i = 1, 4 do
 		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, GuiRoot, CT_TEXTURE)
+		d("GroundMarker: Created marker control " .. i)
 
 		marker:SetDimensions(128, 128)
 		marker:SetAnchor(CENTER, GuiRoot, CENTER, 0, 0)
@@ -115,9 +121,15 @@ function GroundMarker:CreateMarkerControls()
 
 		-- Set initial texture
 		self:UpdateMarkerTexture(i)
+		d("GroundMarker: Set texture for marker " .. i)
 
 		markers[i] = marker
+		
+		-- Make sure it's visible for testing
+		marker:SetHidden(false)
+		d("GroundMarker: Made marker " .. i .. " visible")
 	end
+	d("GroundMarker: Finished creating marker controls")
 end
 
 function GroundMarker:UpdateMarkerTexture(markerIndex)
@@ -131,8 +143,6 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 	-- Set texture based on type
 	if settings.type == "circle" then
 		marker:SetTexture("GroundMarker/textures/circle.dds")
-	elseif settings.type == "x" then
-		marker:SetTexture("GroundMarker/textures/x.dds")
 	elseif settings.type == "custom" and settings.customTexture ~= "" then
 		marker:SetTexture(settings.customTexture)
 	else
@@ -148,6 +158,13 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 end
 
 function GroundMarker:OnUpdate()
+	-- Debug every few seconds (avoid spamming)
+	local currentTime = GetGameTimeMilliseconds()
+	if not self.lastDebugTime or (currentTime - self.lastDebugTime) > 5000 then
+		d("GroundMarker: OnUpdate called, enabled = " .. tostring(self.savedVariables.enabled))
+		self.lastDebugTime = currentTime
+	end
+
 	if not self.savedVariables.enabled then
 		-- Hide all markers
 		for i = 1, 4 do
@@ -179,12 +196,16 @@ function GroundMarker:UpdateMarker(markerIndex)
 	end
 
 	-- Convert world position to screen position
-	local screenX, screenY, isInView = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
+	local screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
 
-	if not isInView then
+	-- Check if the position is valid and visible on screen
+	if not isOnScreen or not screenX or not screenY then
 		marker:SetHidden(true)
 		return
 	end
+	
+	-- Add debug output to help troubleshoot
+	d("Marker " .. markerIndex .. " position: " .. tostring(screenX) .. ", " .. tostring(screenY))
 
 	-- Apply position
 	marker:ClearAnchors()
@@ -276,12 +297,12 @@ function GroundMarker:OnSlashCommand(args)
 		end
 	elseif cmd == "type" and commands[2] then
 		local markerType = commands[2]:lower()
-		if markerType == "circle" or markerType == "x" or markerType == "custom" then
+		if markerType == "circle" or markerType == "custom" then
 			self.savedVariables.markers[1].type = markerType
 			self:UpdateMarkerTexture(1)
 			d("Ground Marker type set to " .. markerType)
 		else
-			d("Invalid type. Use 'circle', 'x', or 'custom'")
+			d("Invalid type. Use 'circle' or 'custom'")
 		end
 	elseif cmd == "color" and commands[2] and commands[3] and commands[4] then
 		local r = tonumber(commands[2]) / 255
