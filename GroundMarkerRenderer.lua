@@ -12,8 +12,8 @@ function GroundMarker.Renderer:GetEnhancedScreenPosition(worldX, worldY, worldZ)
 
 	-- Additional depth calculation for better ground alignment
 	if isInView then
-		-- Get camera position for depth testing
-		local camX, camY, camZ = GetGameCameraInteractableActionPosition()
+		-- Get camera position for depth testing (using player position as fallback)
+		local _, camX, camY, camZ = GetUnitWorldPosition("player")
 
 		-- Calculate distance from camera
 		local dx = worldX - camX

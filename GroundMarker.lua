@@ -91,6 +91,15 @@ end
 -- Initialization
 function GroundMarker:Initialize()
 	d("GroundMarker: Initializing...")
+	
+	-- Load renderer first to ensure it's available
+	local renderer = GroundMarker.Renderer
+	if renderer then
+		d("GroundMarker: Renderer module loaded")
+	else
+		d("GroundMarker: WARNING - Renderer module not available")
+	end
+	
 	-- Load saved variables
 	self.savedVariables = ZO_SavedVars:NewCharacterIdSettings("GroundMarkerSavedVars", 1, nil, self.defaults)
 	d("GroundMarker: Saved variables loaded")
@@ -225,13 +234,12 @@ function GroundMarker:UpdateMarker(markerIndex)
 		return
 	end
 
-	-- Try using the Renderer if available
+	-- Convert world position to screen position
 	local screenX, screenY, isOnScreen
-	if self.Renderer and self.Renderer.GetEnhancedScreenPosition then
-		screenX, screenY, isOnScreen = self.Renderer:GetEnhancedScreenPosition(worldX, worldY, worldZ)
-	else
-		screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
-	end
+	
+	-- Try using standard WorldPositionToGuiRender3DPosition first
+	screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
+	d("WorldPositionToGuiRender3DPosition result: " .. tostring(screenX) .. ", " .. tostring(screenY) .. ", " .. tostring(isOnScreen))
 
 	-- For debugging, try fixed position if conversion failed
 	if not isOnScreen or not screenX or not screenY then
