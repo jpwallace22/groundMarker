@@ -1,3 +1,4 @@
+d("GroundMarker: File loaded")
 GroundMarker = {}
 GroundMarker.name = "GroundMarker"
 GroundMarker.version = "1.0.0"
@@ -51,8 +52,6 @@ GroundMarker.defaults = {
 
 -- Local variables
 local markers = {}
-local updateTimer = 0
-local isInitialized = false
 
 -- Utility functions
 local function GetForwardVector()
@@ -85,9 +84,10 @@ end
 
 -- Initialization
 function GroundMarker:Initialize()
+	d("GroundMarker: Initializing...")
 	-- Load saved variables
 	self.savedVariables = ZO_SavedVars:NewCharacterIdSettings("GroundMarkerSavedVars", 1, nil, self.defaults)
-
+	d("GroundMarker: Saved variables loaded")
 	-- Create marker controls
 	self:CreateMarkerControls()
 
@@ -101,8 +101,6 @@ function GroundMarker:Initialize()
 	EVENT_MANAGER:RegisterForUpdate(self.name .. "Update", self.savedVariables.updateFrequency * 1000, function()
 		self:OnUpdate()
 	end)
-
-	isInitialized = true
 end
 
 function GroundMarker:CreateMarkerControls()
@@ -236,11 +234,12 @@ end
 
 -- Command handlers
 function GroundMarker:RegisterCommands()
+	local addon = self -- Capture self reference
 	SLASH_COMMANDS["/groundmarker"] = function(args)
-		self:OnSlashCommand(args)
+		addon:OnSlashCommand(args)
 	end
 	SLASH_COMMANDS["/gm"] = function(args)
-		self:OnSlashCommand(args)
+		addon:OnSlashCommand(args)
 	end
 end
 
@@ -359,8 +358,10 @@ function GroundMarker:FireCallbacks(event, ...)
 end
 
 -- Event handlers
-EVENT_MANAGER:RegisterForEvent(GroundMarker.name, EVENT_ADD_ON_LOADED, function(event, addonName)
+EVENT_MANAGER:RegisterForEvent(GroundMarker.name, EVENT_ADD_ON_LOADED, function(_, addonName)
+	d("Addon loaded: " .. addonName)
 	if addonName == GroundMarker.name then
+		d("GroundMarker: Name matches, initializing...")
 		GroundMarker:Initialize()
 	end
 end)
