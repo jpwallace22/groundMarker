@@ -260,7 +260,12 @@ function GroundMarker:OnSlashCommand(args)
 
 	if cmd == "settings" then
 		-- Open settings menu
-		LAM:OpenToPanel(self.settingsPanel)
+		local LAM = LibAddonMenu2
+		if LAM and self.settingsPanel then
+			LAM:OpenToPanel(self.settingsPanel)
+		else
+			d({ "Settings menu not available. Make sure LibAddonMenu2 is installed." })
+		end
 	elseif cmd == "distance" and commands[2] then
 		local distance = tonumber(commands[2])
 		if distance and distance >= 1 and distance <= 50 then
