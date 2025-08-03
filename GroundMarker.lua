@@ -203,8 +203,6 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 	end
 end
 
-end
-
 function GroundMarker:OnUpdate()
 	-- Debug only once at startup
 	if not self.initialUpdateDone then
