@@ -83,7 +83,7 @@ local function GetMarkerWorldPosition(markerIndex)
 	-- This keeps the marker at the same height as the player
 	local markerY = worldY
 	
-	d("GetMarkerWorldPosition: " .. markerIndex .. " at " .. tostring(markerX) .. ", " .. tostring(markerY) .. ", " .. tostring(markerZ))
+	-- Debug log disabled for performance
 
 	return markerX, markerY, markerZ
 end
@@ -126,31 +126,49 @@ end
 
 function GroundMarker:CreateMarkerControls()
 	d("GroundMarker: Creating marker controls")
-	for i = 1, 4 do
+	
+	-- Always create marker 1 as a special visible test marker
+	local testMarker = WINDOW_MANAGER:CreateControl("GroundMarker1", GuiRoot, CT_TEXTURE)
+	d("GroundMarker: Created test marker control")
+	
+	-- Set larger dimensions for easier visibility
+	testMarker:SetDimensions(512, 512) -- Extra large for testing
+	
+	-- Position in center of screen initially
+	local uiWidth, uiHeight = GuiRoot:GetDimensions()
+	testMarker:SetAnchor(CENTER, GuiRoot, TOPLEFT, uiWidth/2, uiHeight/2)
+	
+	-- Make sure it's on top of EVERYTHING
+	testMarker:SetDrawLevel(999999)
+	testMarker:SetDrawLayer(DL_OVERLAY)
+	testMarker:SetDrawTier(DT_HIGH)
+	testMarker:SetColor(1, 0, 0, 1) -- Bright red
+	testMarker:SetAlpha(1.0)
+	testMarker:SetHidden(false)
+	
+	-- Store in table first
+	markers[1] = testMarker
+	d("GroundMarker: Created special test marker - THIS SHOULD BE VISIBLE!")
+	
+	-- Create remaining markers
+	for i = 2, 4 do
 		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, GuiRoot, CT_TEXTURE)
 		d("GroundMarker: Created marker control " .. i)
 
-		-- Set larger dimensions for easier visibility
+		-- Set normal dimensions
 		marker:SetDimensions(256, 256)
-		-- Position in center of screen initially
-		local uiWidth, uiHeight = GuiRoot:GetDimensions()
-		marker:SetAnchor(CENTER, GuiRoot, TOPLEFT, uiWidth/2, uiHeight/2)
+		marker:SetAnchor(CENTER, GuiRoot, TOPLEFT, uiWidth/2, uiHeight/2 + (i * 50))
 		
-		-- Make sure it's on top of other UI
+		-- Regular UI settings
 		marker:SetDrawLevel(100)
 		marker:SetDrawLayer(DL_OVERLAY)
 		marker:SetDrawTier(DT_HIGH)
 
-		-- Store in table first so UpdateMarkerTexture can use it
+		-- Store in table
 		markers[i] = marker
 
 		-- Set initial texture
 		self:UpdateMarkerTexture(i)
-		d("GroundMarker: Set texture for marker " .. i)
-		
-		-- Make sure it's visible for testing
-		marker:SetHidden(false)
-		d("GroundMarker: Made marker " .. i .. " visible")
 	end
 	d("GroundMarker: Finished creating marker controls")
 end
@@ -164,57 +182,69 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 		return
 	end
 
-	-- Set texture based on type (make sure to use absolute file path)
-	local addonRootPath = "/Users/juwallace/code/groundMarker"
-	local texturePath
-	if settings.type == "circle" then
-		texturePath = addonRootPath .. "/textures/circle.dds"
-	elseif settings.type == "custom" and settings.customTexture ~= "" then
-		texturePath = settings.customTexture
-	else
-		texturePath = addonRootPath .. "/textures/circle.dds"
+	-- Use a simple solid color for testing instead of textures
+	marker:SetColor(1, 0, 0, 1)  -- Bright red color
+	
+	-- Set marker to be a solid block instead of using textures
+	if marker.SetDrawLevel then
+		marker:SetDrawLevel(100)
 	end
 	
-	d("GroundMarker: Setting texture for marker " .. markerIndex .. " to " .. texturePath)
-	marker:SetTexture(texturePath)
-
-	-- Set color - make more visible with higher opacity
-	local r = settings.color.r
-	local g = settings.color.g
-	local b = settings.color.b
-	local a = 1.0  -- Force full opacity for testing
-	marker:SetColor(r, g, b, a)
-	d("GroundMarker: Set color for marker " .. markerIndex .. " to " .. r .. ", " .. g .. ", " .. b .. ", " .. a)
-
-	-- Set size - make larger for testing
-	local baseSize = 256 * settings.size  -- Double size from 128 to 256 for testing
-	marker:SetDimensions(baseSize, baseSize)
-	d("GroundMarker: Set size for marker " .. markerIndex .. " to " .. baseSize)
-	
-	-- Force visibility for debugging
+	-- Make marker very visible
+	marker:SetDimensions(256, 256)
 	marker:SetAlpha(1.0)
-	marker:SetHidden(false)
+	
+	d("GroundMarker: Set marker " .. markerIndex .. " to solid red color for testing")
+	
+	-- Apply settings colors if available
+	if settings and settings.color then
+		marker:SetColor(settings.color.r, settings.color.g, settings.color.b, 1.0)
+		d("GroundMarker: Applied custom color to marker " .. markerIndex)
+	end
+end
+
 end
 
 function GroundMarker:OnUpdate()
-	-- Debug every few seconds (avoid spamming)
-	local currentTime = GetGameTimeMilliseconds()
-	if not self.lastDebugTime or (currentTime - self.lastDebugTime) > 5000 then
-		d("GroundMarker: OnUpdate called, enabled = " .. tostring(self.savedVariables.enabled))
-		self.lastDebugTime = currentTime
+	-- Debug only once at startup
+	if not self.initialUpdateDone then
+		d("GroundMarker: First OnUpdate, enabled = " .. tostring(self.savedVariables.enabled))
+		self.initialUpdateDone = true
 	end
 
 	if not self.savedVariables.enabled then
 		-- Hide all markers
 		for i = 1, 4 do
-			markers[i]:SetHidden(true)
+			if markers[i] then
+				markers[i]:SetHidden(true)
+			end
 		end
 		return
 	end
 
-	-- Update each marker
-	for i = 1, 4 do
-		self:UpdateMarker(i)
+	-- Force marker 1 to be visible and shown at center screen for testing
+	if markers[1] then
+		-- First time setup
+		if not self.markerInitialized then
+			d("GroundMarker: Positioning marker 1 at center screen - THIS SHOULD BE VISIBLE!")
+			self.markerInitialized = true
+		end
+		
+		-- Position in center
+		local uiWidth, uiHeight = GuiRoot:GetDimensions()
+		markers[1]:ClearAnchors()
+		markers[1]:SetAnchor(CENTER, GuiRoot, TOPLEFT, uiWidth/2, uiHeight/2)
+		markers[1]:SetAlpha(1.0)
+		markers[1]:SetHidden(false)
+		
+		-- Only update other markers if the first one is working
+		for i = 2, 4 do
+			if markers[i] and self.savedVariables.markers[i].enabled then
+				self:UpdateMarker(i)
+			elseif markers[i] then
+				markers[i]:SetHidden(true)
+			end
+		end
 	end
 end
 
@@ -239,7 +269,7 @@ function GroundMarker:UpdateMarker(markerIndex)
 	
 	-- Try using standard WorldPositionToGuiRender3DPosition first
 	screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
-	d("WorldPositionToGuiRender3DPosition result: " .. tostring(screenX) .. ", " .. tostring(screenY) .. ", " .. tostring(isOnScreen))
+	-- Debug log disabled for performance
 
 	-- For debugging, try fixed position if conversion failed
 	if not isOnScreen or not screenX or not screenY then
@@ -248,11 +278,11 @@ function GroundMarker:UpdateMarker(markerIndex)
 		screenX = uiWidth / 2
 		screenY = uiHeight / 2
 		isOnScreen = true
-		d("Marker " .. markerIndex .. " using fallback center position")
+		-- Debug log disabled for performance
 	end
 	
 	-- Add debug output to help troubleshoot
-	d("Marker " .. markerIndex .. " position: " .. tostring(screenX) .. ", " .. tostring(screenY) .. ", isOnScreen: " .. tostring(isOnScreen))
+	-- Debug log disabled for performance
 
 	-- Apply position
 	marker:ClearAnchors()
