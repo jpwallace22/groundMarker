@@ -67,36 +67,6 @@ function GroundMarker:CreateSettingsMenu()
 			end,
 			width = "full",
 		},
-		{
-			type = "slider",
-			name = "Draw Distance",
-			tooltip = "Maximum distance to render markers (in meters)",
-			min = 50,
-			max = 200,
-			step = 10,
-			getFunc = function()
-				return self.savedVariables.drawDistance
-			end,
-			setFunc = function(value)
-				self.savedVariables.drawDistance = value
-			end,
-			width = "full",
-		},
-		{
-			type = "slider",
-			name = "Fade Distance",
-			tooltip = "Distance at which markers start fading (in meters)",
-			min = 30,
-			max = 150,
-			step = 10,
-			getFunc = function()
-				return self.savedVariables.fadeDistance
-			end,
-			setFunc = function(value)
-				self.savedVariables.fadeDistance = value
-			end,
-			width = "full",
-		},
 	}
 
 	-- Add settings for each marker

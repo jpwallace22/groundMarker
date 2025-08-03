@@ -43,8 +43,6 @@ GroundMarker.defaults = {
 		},
 	},
 	updateFrequency = 0.05, -- seconds
-	drawDistance = 100,
-	fadeDistance = 80,
 	qualityMode = "high",
 	customTexture = "",
 }
@@ -102,25 +100,90 @@ function GroundMarker:Initialize()
 	EVENT_MANAGER:RegisterForUpdate(self.name .. "Update", self.savedVariables.updateFrequency * 1000, function()
 		self:OnUpdate()
 	end)
+	
+	-- For debugging - run a visibility test after a delay
+	zo_callLater(function()
+		self:DiagnosticTest()
+	end, 5000)
+end
+
+-- Diagnostic function to help troubleshoot marker visibility
+function GroundMarker:DiagnosticTest()
+	-- Get first marker
+	local marker = markers[1]
+	
+	if not marker then
+		d("GroundMarker Diagnostic: Marker 1 not initialized!")
+		return
+	end
+	
+	-- Check if textures can be loaded
+	if not marker:GetTextureFileName() or marker:GetTextureFileName() == "" then
+		d("GroundMarker Diagnostic: Texture not loaded!")
+	else
+		d("GroundMarker Diagnostic: Texture loaded: " .. marker:GetTextureFileName())
+	end
+	
+	-- Check marker dimensions
+	local width, height = marker:GetDimensions()
+	d("GroundMarker Diagnostic: Marker dimensions: " .. width .. "x" .. height)
+	
+	-- Check if marker is hidden
+	d("GroundMarker Diagnostic: Marker hidden: " .. tostring(marker:IsHidden()))
+	
+	-- Check visibility settings
+	d("GroundMarker Diagnostic: Addon enabled: " .. tostring(self.savedVariables.enabled))
+	d("GroundMarker Diagnostic: Marker enabled: " .. tostring(self.savedVariables.markers[1].enabled))
+	
+	-- Force marker to be visible in center of screen for testing
+	marker:ClearAnchors()
+	local uiWidth, uiHeight = GuiRoot:GetDimensions()
+	marker:SetAnchor(CENTER, GuiRoot, CENTER, 0, 0)
+	marker:SetColor(1, 0, 0, 1)
+	marker:SetDimensions(200, 200)
+	marker:SetHidden(false)
+	d("GroundMarker Diagnostic: Forced marker to center of screen!")
 end
 
 function GroundMarker:CreateMarkerControls()
 	-- Create markers
 	for i = 1, 4 do
-		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, GuiRoot, CT_TEXTURE)
+		-- Create a topLevelControl to hold the marker
+		local container = WINDOW_MANAGER:CreateTopLevelWindow("GroundMarkerContainer" .. i)
+		container:SetClampedToScreen(true)
+		container:SetDrawLayer(DL_OVERLAY)
+		container:SetDrawTier(DT_HIGH)
+		container:SetDrawLevel(5000 + i) -- Very high draw level
+		container:SetDimensions(200, 200)
+		
+		-- Create the texture control inside the container
+		local marker = WINDOW_MANAGER:CreateControl("GroundMarker" .. i, container, CT_TEXTURE)
 		
 		-- Set default properties
-		marker:SetDimensions(128, 128)
-		marker:SetAnchor(CENTER, GuiRoot, CENTER, 0, 0)
-		marker:SetDrawLevel(0)
-		marker:SetDrawLayer(DL_OVERLAY)
-		marker:SetDrawTier(DT_MEDIUM)
-		marker:SetHidden(true)
+		marker:SetDimensions(200, 200) -- Larger size
+		marker:SetAnchorFill(container) -- Fill the container
+		marker:SetColor(1, 0, 0, 1) -- Start with bright red for visibility
+		
+		-- Make the container visible but center it off-screen initially
+		container:SetAnchor(CENTER, GuiRoot, CENTER, 0, 0)
+		container:SetAlpha(1)
+		container:SetHidden(false)
+		
+		-- Store in markers table
+		markers[i] = marker
+		self["markerContainer" .. i] = container
 		
 		-- Set initial texture based on settings
-		markers[i] = marker
 		self:UpdateMarkerTexture(i)
+		
+		-- Make sure the first marker is visible for testing
+		if i == 1 then
+			marker:SetHidden(false)
+			container:SetHidden(false)
+		end
 	end
+	
+	d("GroundMarker: Created " .. #markers .. " marker controls")
 end
 
 
@@ -132,25 +195,44 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 		return
 	end
 
-	-- Set texture based on type
+	-- Set texture based on type - use full absolute path
+	-- This is a common issue with ESO textures - paths must be specific
+	local addonRootPath = "/esoui/art" -- ESO built-in texture path as fallback
 	local texturePath
+	
+	-- Try different paths for the texture
 	if settings.type == "circle" then
-		texturePath = "GroundMarker/textures/circle.dds"
+		-- Try multiple texture sources
+		texturePath = "GroundMarker/textures/circle.dds" -- Standard path
+		
+		-- Fallback to built-in textures if needed
+		if not DoesFileExist(texturePath) then
+			texturePath = "/esoui/art/icons/quest_icon_main.dds" -- Built-in circular icon
+			d("GroundMarker: Using fallback texture for circle")
+		end
 	elseif settings.type == "x" then
 		texturePath = "GroundMarker/textures/x.dds"
+		
+		-- Fallback to built-in textures if needed
+		if not DoesFileExist(texturePath) then
+			texturePath = "/esoui/art/buttons/decline_up.dds" -- Built-in X icon
+			d("GroundMarker: Using fallback texture for X")
+		end
 	elseif settings.type == "custom" and settings.customTexture ~= "" then
 		texturePath = settings.customTexture
 	else
-		texturePath = "GroundMarker/textures/circle.dds"
+		texturePath = "/esoui/art/icons/mapkey/mapkey_groupboss.dds" -- Very visible fallback
 	end
 	
+	-- Set the texture and save the path for diagnostic
+	marker.texturePath = texturePath
 	marker:SetTexture(texturePath)
 	
 	-- Apply color settings
-	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a)
+	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, 1.0) -- Force full opacity
 	
-	-- Set size based on settings
-	local size = 128 * settings.size
+	-- Set size based on settings - make it bigger to ensure visibility
+	local size = 200 * settings.size
 	marker:SetDimensions(size, size)
 end
 
@@ -173,56 +255,54 @@ end
 
 function GroundMarker:UpdateMarker(markerIndex)
 	local marker = markers[markerIndex]
+	local container = self["markerContainer" .. markerIndex]
 	local settings = self.savedVariables.markers[markerIndex]
 
-	if not marker or not settings or not settings.enabled then
-		marker:SetHidden(true)
+	-- Make sure we have all the objects we need
+	if not marker or not container or not settings or not settings.enabled then
+		if container then container:SetHidden(true) end
+		return
+	end
+
+	-- For debugging, if it's the first marker, always show it in center for testing
+	if markerIndex == 1 and not self.initialTestDone then
+		container:SetAnchor(CENTER, GuiRoot, CENTER, 0, 0)
+		marker:SetColor(1, 0, 0, 1)
+		container:SetHidden(false)
+		marker:SetHidden(false)
+		
+		-- Only do this once
+		self.initialTestDone = true
 		return
 	end
 
 	-- Get marker world position
 	local worldX, worldY, worldZ = GetMarkerWorldPosition(markerIndex)
 	if not worldX then
-		marker:SetHidden(true)
+		container:SetHidden(true)
 		return
 	end
 
 	-- Convert world position to screen position
 	local screenX, screenY, isOnScreen = WorldPositionToGuiRender3DPosition(worldX, worldY, worldZ)
-	
-	-- If position conversion failed, hide marker
+
+	-- Check if the position is valid and visible on screen
 	if not isOnScreen or not screenX or not screenY then
-		marker:SetHidden(true)
+		container:SetHidden(true)
 		return
 	end
 
-	-- Apply position
-	marker:ClearAnchors()
-	marker:SetAnchor(CENTER, GuiRoot, TOPLEFT, screenX, screenY)
+	-- Position the container (which holds the marker)
+	container:ClearAnchors()
+	container:SetAnchor(CENTER, GuiRoot, TOPLEFT, screenX, screenY)
 
-	-- Calculate distance for scaling/fading
-	local playerX, _, playerZ = GetUnitWorldPosition("player")
-	local distance = math.sqrt((worldX - playerX) ^ 2 + (worldZ - playerZ) ^ 2) / 100 -- Convert to meters
-
-	-- Apply distance-based scaling
-	if self.savedVariables.qualityMode == "high" then
-		local scale = math.max(0.5, 1 - (distance / self.savedVariables.drawDistance))
-		local size = 128 * settings.size * scale
-		marker:SetDimensions(size, size)
-	end
-
-	-- Apply distance-based fading
-	if distance > self.savedVariables.fadeDistance then
-		local fadeAlpha = 1
-			- (
-				(distance - self.savedVariables.fadeDistance)
-				/ (self.savedVariables.drawDistance - self.savedVariables.fadeDistance)
-			)
-		fadeAlpha = math.max(0, math.min(1, fadeAlpha))
-		marker:SetAlpha(settings.color.a * fadeAlpha)
-	else
-		marker:SetAlpha(settings.color.a)
-	end
+	-- Set marker size based on settings
+	local size = 200 * settings.size
+	container:SetDimensions(size, size)
+	marker:SetDimensions(size, size)
+	
+	-- Apply color settings - force full opacity for testing
+	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, 1.0)
 
 	-- Apply rotation if enabled
 	if settings.rotateWithPlayer then
@@ -239,6 +319,8 @@ function GroundMarker:UpdateMarker(markerIndex)
 		marker:SetAlpha(marker:GetAlpha() * pulse)
 	end
 
+	-- Make sure both container and marker are visible
+	container:SetHidden(false)
 	marker:SetHidden(false)
 end
 
