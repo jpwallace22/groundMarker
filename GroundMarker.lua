@@ -68,17 +68,20 @@ local function GetMarkerWorldPosition(markerIndex)
 	-- Get player position
 	local zone, worldX, worldY, worldZ = GetUnitWorldPosition("player")
 
-	-- Get forward vector
-	local forwardX, forwardZ = GetForwardVector()
+	-- Get forward vector - use camera heading for proper orientation in front of player
+	local heading = GetPlayerCameraHeading()
+	local forwardX = math.sin(heading)
+	local forwardZ = math.cos(heading)
 	
-	-- Calculate marker position
+	-- Calculate marker position in world coordinates
 	local distance = marker.distance * 100 -- Convert meters to centimeters
 	local markerX = worldX + (forwardX * distance)
 	local markerZ = worldZ + (forwardZ * distance)
 	
 	-- Use player Y position for height (ground level)
-	local markerY = worldY
-
+	-- Offset slightly lower to ensure it's on the ground
+	local markerY = worldY - 10 -- Offset 10cm below player to ensure it's on the ground
+	
 	return markerX, markerY, markerZ
 end
 
@@ -141,34 +144,44 @@ function GroundMarker:UpdateMarkerTexture(markerIndex)
 		return
 	end
 
-	-- Set texture based on type - use full absolute path
-	-- This is a common issue with ESO textures - paths must be specific
-	local addonRootPath = "/esoui/art" -- ESO built-in texture path as fallback
+	-- Set texture based on type
 	local texturePath
 	
-	-- Set texture paths
+	-- Try different paths for the texture
 	if settings.type == "circle" then
-		-- Try to use addon's texture
-		texturePath = "GroundMarker/textures/circle.dds" -- Standard path
+		-- Use a known circle texture from game UI if possible
+		texturePath = "GroundMarker/textures/circle.dds"
+		-- Fallback to a known circle texture from ESO UI
+		if not marker:SetTexture(texturePath) then
+			texturePath = "/esoui/art/buttons/gamepad/pointsminus_up.dds" -- Round button texture
+		end
 	elseif settings.type == "x" then
-		-- Try to use addon's texture
 		texturePath = "GroundMarker/textures/x.dds"
+		-- Fallback to a known X texture from ESO UI
+		if not marker:SetTexture(texturePath) then
+			texturePath = "/esoui/art/buttons/decline_up.dds" -- X button texture
+		end
 	elseif settings.type == "custom" and settings.customTexture ~= "" then
 		texturePath = settings.customTexture
 	else
-		texturePath = "/esoui/art/icons/mapkey/mapkey_groupboss.dds" -- Very visible fallback
+		-- Use a very visible default
+		texturePath = "/esoui/art/icons/mapkey/mapkey_groupboss.dds"
 	end
 	
-	-- Set the texture and save the path for diagnostic
-	marker.texturePath = texturePath
+	-- Set the texture
 	marker:SetTexture(texturePath)
 	
-	-- Apply color settings
-	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, 1.0) -- Force full opacity
-	
-	-- Set size based on settings - make it bigger to ensure visibility
-	local size = 200 * settings.size
-	marker:SetDimensions(size, size)
+	-- Apply projection effect - make it appear to be lying flat on the ground
+	-- We do this by "squashing" the Y dimension to simulate perspective
+	-- This is a common technique to fake 3D ground markers in 2D UI systems
+	if settings.type == "circle" then
+		-- For circles, we can use a special technique to make them appear flat on ground
+		-- Set aspect ratio to make it look like it's projected onto the ground
+		local container = GroundMarker["markerContainer" .. markerIndex]
+		if container then
+			container:SetScale(1.0, 0.5) -- Squash Y axis to create 3D ground projection effect
+		end
+	end
 end
 
 function GroundMarker:OnUpdate()
@@ -199,7 +212,7 @@ function GroundMarker:UpdateMarker(markerIndex)
 		return
 	end
 
-	-- Get marker world position
+	-- Get marker world position - this is the 3D position in the world
 	local worldX, worldY, worldZ = GetMarkerWorldPosition(markerIndex)
 	if not worldX then
 		container:SetHidden(true)
@@ -217,21 +230,48 @@ function GroundMarker:UpdateMarker(markerIndex)
 
 	-- Position the container (which holds the marker)
 	container:ClearAnchors()
+	
+	-- Properly position the marker on screen
+	-- The worldPosition to screen conversion gives us coordinates relative to TOPLEFT of screen
 	container:SetAnchor(CENTER, GuiRoot, TOPLEFT, screenX, screenY)
-
-	-- Set marker size based on settings
-	local size = 128 * settings.size
+	
+	-- Calculate distance from player for scaling
+	local _, playerX, playerY, playerZ = GetUnitWorldPosition("player")
+	local distanceToMarker = math.sqrt(
+		(worldX - playerX)^2 + 
+		(worldY - playerY)^2 + 
+		(worldZ - playerZ)^2) / 100 -- Convert to meters
+	
+	-- Calculate size based on distance - apply perspective scaling
+	-- The further away, the smaller it appears (simulating 3D perspective)
+	local baseSize = 128 * settings.size
+	local perspectiveScale = 1.0
+	
+	-- Apply non-linear perspective scaling based on distance
+	if distanceToMarker > 1 then -- More than 1 meter away
+		perspectiveScale = 1 / (distanceToMarker * 0.1)
+		perspectiveScale = math.max(0.2, math.min(1.5, perspectiveScale)) -- Clamp to reasonable range
+	end
+	
+	local size = baseSize * perspectiveScale
 	container:SetDimensions(size, size)
 	
-	-- Apply color settings
-	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a)
+	-- Adjust alpha based on distance too - more distant markers are more transparent
+	local alphaScale = 1.0
+	if distanceToMarker > 10 then -- More than 10 meters away
+		alphaScale = 1 - ((distanceToMarker - 10) / 40) -- Linear fade over 40m
+		alphaScale = math.max(0.3, alphaScale) -- Don't go fully transparent
+	end
+	
+	-- Apply color with distance-adjusted alpha
+	marker:SetColor(settings.color.r, settings.color.g, settings.color.b, settings.color.a * alphaScale)
 
-	-- Apply rotation if enabled
+	-- Apply rotation - align with ground
+	-- For ground markers, typically we want them to lie flat, not rotate with camera
+	marker:SetTextureRotation(0)
 	if settings.rotateWithPlayer then
 		local heading = GetPlayerCameraHeading()
 		marker:SetTextureRotation(heading)
-	else
-		marker:SetTextureRotation(0)
 	end
 
 	-- Apply pulse effect if enabled
